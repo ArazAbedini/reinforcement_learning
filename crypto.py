@@ -17,6 +17,6 @@ model = Model(FILE_PATH)
 # model.plot_df()
 print(model.average_derivation(5))
 model.smooth_filter(21,3)
-model.find_maximumm()
+# model.find_maximumm()
 model.plot_df()
 

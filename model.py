@@ -50,15 +50,34 @@ class Model():
             if max_value_index not in abs_peaks:
                 abs_peaks.append(max_value_index)
         abs_array = np.array(abs_peaks).astype('int16')
-        for index in abs_peaks:
-            index_list = abs_peaks[(index <= abs_peaks) & (abs_peaks < index + 21)]
-            print(index_list)
-            print(type(index_list))
 
+        filtered_array = self.second_filter(abs_array)
+        return filtered_array
+
+
+    def second_filter(self, abs_array: np.array) -> np.array:
+        bool_array = np.ones_like(abs_array, dtype=bool)
+        for index in abs_array:
+            condition = (index <= abs_array) & (abs_array < index + 21)
+            price_index_list = abs_array[condition]
+            indices = np.where(condition)[0]  # index of price_index_list in abs_array
+            candidate_index = price_index_list[
+                np.argmax(self.price[price_index_list])]  # its item in abs_array which is argmax
+            candidate = np.where(price_index_list == candidate_index)[0][0]  # it is the index of candidate in indidces
+            index_bool_array = np.zeros_like(indices, dtype=bool)
+            index_bool_array[candidate] = True
+            for index, bool_value in zip(indices, index_bool_array):
+                if bool_value == False:
+                    bool_array[index] = False
+        second_filter = []
+        for index, bool_value in zip(abs_array, bool_array):
+            if bool_value == True:
+                second_filter.append(index)
         
-               
-        return np.array(abs_peaks)
-
+        return np.array(second_filter)
+    
+    
+    
     def average_derivation(self, last_day: int) -> float:
         standard_start_day = last_day
         length_day = last_day
