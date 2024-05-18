@@ -1,60 +1,60 @@
+import matplotlib.pyplot as plt
 import numpy as np
+def zigzag(sequence, threshold):
+    peaks = []
+    troughs = []
+
+    last_peak = sequence[0]
+    last_trough = sequence[0]
+    last_direction = 0  # 1 for peak, -1 for trough
+
+    for i in range(1, len(sequence)):
+        if last_direction == 0:  # initial case
+            if sequence[i] > last_peak:
+                last_peak = sequence[i]
+                last_direction = 1
+                peaks.append((i, sequence[i]))
+            elif sequence[i] < last_trough:
+                last_trough = sequence[i]
+                last_direction = -1
+                troughs.append((i, sequence[i]))
+        elif last_direction == 1:
+            if sequence[i] > last_peak:
+                last_peak = sequence[i]
+                peaks[-1] = (i, sequence[i])  # update the last peak
+            elif sequence[i] <= last_peak * (1 - threshold):
+                last_trough = sequence[i]
+                last_direction = -1
+                troughs.append((i, sequence[i]))
+        elif last_direction == -1:
+            if sequence[i] < last_trough:
+                last_trough = sequence[i]
+                troughs[-1] = (i, sequence[i])  # update the last trough
+            elif sequence[i] >= last_trough * (1 + threshold):
+                last_peak = sequence[i]
+                last_direction = 1
+                peaks.append((i, sequence[i]))
+
+    return peaks, troughs
 
 
-transition_probabilities = [ # shape=[s, a, s']
-[[0.7, 0.3, 0.0], [1.0, 0.0, 0.0], [0.8, 0.2, 0.0]],
-[[0.0, 1.0, 0.0], None, [0.0, 0.0, 1.0]],
-[None, [0.8, 0.1, 0.1], None]
-]
-rewards = [ # shape=[s, a, s']
-[[+10, 0, 0], [0, 0, 0], [0, 0, 0]],
-[[0, 0, 0], [0, 0, 0], [0, 0, -50]],
-[[0, 0, 0], [+40, 0, 0], [0, 0, 0]]
-]
-possible_actions = [[0, 1, 2], [0, 2], [1]]
+# Sample sequence of 42 numbers
+sequence = np.array([3, 5, 2, 8, 7, 6, 5, 9, 10, 3, 6, 2, 5, 8, 9, 1, 4, 7, 2, 6, 3,
+                     2, 3, 4, 6, 7, 5, 3, 2, 4, 6, 8, 5, 7, 9, 4, 5, 6, 2, 4, 1])
 
+# Define the threshold for the Zig Zag indicator
+threshold = 0.1  # 10%
 
-Q_values = np.full((3, 3), -np.inf) # -np.inf for impossible actions
-for state, actions in enumerate(possible_actions):
-    Q_values[state, actions] = 0.0
+# Calculate peaks and troughs
+peaks, troughs = zigzag(sequence, threshold)
 
+# Plot the sequence
+plt.plot(sequence, marker='o', label='Sequence')
 
-gamma = 0.90 # the discount factor
-for iteration in range(50):
-    Q_prev = Q_values.copy()
-    for s in range(3):
-        for a in possible_actions[s]:
-            t = 0
-            for i in range(3):
-                t = transition_probabilities[s][a][i] * (rewards[s][a][i] + gamma * Q_prev[i].max())
-            Q_values[s, a] = t
+# Plot the Zig Zag indicator
+peak_indices, peak_values = zip(*peaks) if peaks else ([], [])
+trough_indices, trough_values = zip(*troughs) if troughs else ([], [])
+plt.scatter(peak_indices, peak_values, color='green', marker='o', linestyle='-', label='Zig Zag Peaks')
+plt.scatter(trough_indices, trough_values, color='red', marker='o', linestyle='-', label='Zig Zag Troughs')
 
-
-def label_process(close: np.ndarray, open_time: np.ndarray) -> np.ndarray:
-    fig, ax = plt.subplots()
-    smooth_arr = signal.savgol_filter(close, window_length=14, polyorder=2)
-    smooth_peak, _ = signal.find_peaks(x=smooth_arr)
-    smooth_valleys, _ = signal.find_peaks(x=-1 * smooth_arr)
-    smooth_peak = find_actual_peak(smooth_peak, close) # in this function we have index of peaks
-    smooth_valleys = find_actual_valleys(smooth_valleys, close) # in this function we have index of valleys
-    y_peaks = close[smooth_peak]
-    y_valleys = close[smooth_valleys]
-    label = np.zeros(len(close), dtype=np.int32)
-    state = 0
-    for i in range(len(close)):
-        if i in smooth_peak:
-            state = 1
-            label[i] = 1
-        elif i in smooth_valleys:
-            state = 0
-        elif state == 1:
-            label[i] = 1
-
-    # ax.plot(open_time, close, color='black')
-    # ax.plot(open_time[smooth_peak], y_peaks, 'ro')
-    # ax.plot(open_time[smooth_valleys], y_valleys, 'go')
-    # plt.xticks(rotation=90)
-    print(f'length of the smooth peak is {len(smooth_peak)}')
-    print(f'length of close is {len(close)}')
-    # plt.show()
-    return label
+plt.show()

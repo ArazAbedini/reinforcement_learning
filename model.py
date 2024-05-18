@@ -6,6 +6,7 @@ import ast
 
 
 class Model():
+
     def __init__(self, file_path):
         self.actions = [-1, 0, 1]
         self.states = ['x_buy', 'buy', 'hold', 'sell', 'x_sell']
@@ -14,7 +15,7 @@ class Model():
         self.price = self.calculate_price()
         self.smooth_price = self.smooth_filter(21, 3)
         self.peaks = self.find_maximumm()
-        # self.find_maximumm()
+        self.valleys = self.find_minimumm()
 
 
 
@@ -37,6 +38,7 @@ class Model():
         id_array = np.array(int_id)
         ax.plot(id_array, price_array, label='overall price')
         ax.scatter(self.peaks, self.price[self.peaks], color='red')
+        ax.scatter(self.valleys, self.price[self.valleys], color='green')
         ax.plot(id_array, self.smooth_price)
         plt.show()
 
@@ -51,18 +53,36 @@ class Model():
                 abs_peaks.append(max_value_index)
         abs_array = np.array(abs_peaks).astype('int16')
 
-        filtered_array = self.second_filter(abs_array)
+        filtered_array = self.second_filter(abs_array, 'max')
+        return filtered_array
+
+    def find_minimumm(self):
+        smooth_valleys, _ = signal.find_peaks(x=-1 * self.smooth_price)
+        abs_valleys = []
+        for point in smooth_valleys:
+            start_index = max(0, point - 21)
+            end_point = min(len(self.price) - 1, point + 21)
+            min_value_index = np.argmin(self.price[start_index: end_point]) + start_index
+            if min_value_index not in abs_valleys:
+                abs_valleys.append(min_value_index)
+        abs_array = np.array(abs_valleys).astype('int16')
+
+        filtered_array = self.second_filter(abs_array, 'min')
         return filtered_array
 
 
-    def second_filter(self, abs_array: np.array) -> np.array:
+    def second_filter(self, abs_array: np.array, filter_type: str) -> np.array:
         bool_array = np.ones_like(abs_array, dtype=bool)
         for index in abs_array:
             condition = (index <= abs_array) & (abs_array < index + 21)
             price_index_list = abs_array[condition]
             indices = np.where(condition)[0]  # index of price_index_list in abs_array
-            candidate_index = price_index_list[
-                np.argmax(self.price[price_index_list])]  # its item in abs_array which is argmax
+            if filter_type == 'max':
+                candidate_index = price_index_list[
+                    np.argmax(self.price[price_index_list])]  # its item in abs_array which is argmax
+            else:
+                candidate_index = price_index_list[
+                    np.argmin(self.price[price_index_list])]  # its item in abs_array which is argmax
             candidate = np.where(price_index_list == candidate_index)[0][0]  # it is the index of candidate in indidces
             index_bool_array = np.zeros_like(indices, dtype=bool)
             index_bool_array[candidate] = True
@@ -93,6 +113,53 @@ class Model():
         
     def smooth_filter(self, length: int, polyorder: int):
         return np.array(signal.savgol_filter(self.price, length, polyorder))
+
+
+    def assign_states(self, close_array: np.array,length: int, polyorder: int):
+        fig, ax = plt.subplots()
+        smooth_array = signal.savgol_filter(close_array, length, polyorder)
+        ax.plot(close_array)
+        ax.plot(smooth_array)
+        plt.show()
+
+    def zigzag(self, sequence: np.array, threshold=0.1):
+        peaks = []
+        troughs = []
+
+        last_peak = sequence[0]
+        last_trough = sequence[0]
+        last_direction = 0  # 1 for peak, -1 for trough
+
+        for i in range(1, len(sequence)):
+            if last_direction == 0:  # initial case
+                if sequence[i] > last_peak:
+                    last_peak = sequence[i]
+                    last_direction = 1
+                    peaks.append((i, sequence[i]))
+                elif sequence[i] < last_trough:
+                    last_trough = sequence[i]
+                    last_direction = -1
+                    troughs.append((i, sequence[i]))
+            elif last_direction == 1:
+                if sequence[i] > last_peak:
+                    last_peak = sequence[i]
+                    peaks[-1] = (i, sequence[i])  # update the last peak
+                elif sequence[i] <= last_peak * (1 - threshold):
+                    last_trough = sequence[i]
+                    last_direction = -1
+                    troughs.append((i, sequence[i]))
+            elif last_direction == -1:
+                if sequence[i] < last_trough:
+                    last_trough = sequence[i]
+                    troughs[-1] = (i, sequence[i])  # update the last trough
+                elif sequence[i] >= last_trough * (1 + threshold):
+                    last_peak = sequence[i]
+                    last_direction = 1
+                    peaks.append((i, sequence[i]))
+
+        return peaks, troughs
+
+
 
 
 
