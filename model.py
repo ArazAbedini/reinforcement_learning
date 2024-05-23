@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from scipy import signal
 import pandas as pd
 import numpy as np
+import random
 import ast
 
 
@@ -17,6 +18,10 @@ class Model():
         self.smooth_price = self.smooth_filter(21, 3)
         self.peaks = self.find_maximumm()
         self.valleys = self.find_minimumm()
+        self.Q_table = pd.DataFrame(data=0.0, index=self.states, columns=self.actions)
+
+
+
 
 
 
@@ -28,6 +33,7 @@ class Model():
         content_list = ast.literal_eval(content)
         new_df = pd.DataFrame(content_list)
         self.df = new_df
+        print(len(self.df))
 
     def calculate_price(self):
         return np.array(self.df['close'].astype('float16'))
@@ -117,7 +123,7 @@ class Model():
 
 
     def assign_states(self, close_array: np.array,length: int, polyorder: int):
-        fig, ax = plt.subplots()
+
         diffs = np.diff(close_array)
         if np.all(diffs >= 0):
             if all(diffs[i] <= diffs[i + 1] for i in range(len(diffs) - 1)):
@@ -151,6 +157,12 @@ class Model():
                 slope_trough, intercept_trough, r_trough, p_trough, std_err_trough = linregress(trough_indices, trough_values)
                 slope = (slope_peak + slope_trough) / 2
                 intercept = (intercept_trough + intercept_peak) / 2
+                if slope >= 2:
+                    return "buy"
+                elif slope <= -2:
+                    return "sell"
+                else:
+                    return "hold"
 
     def zigzag(self, sequence: np.array, threshold=0.1):
         peaks = []
@@ -189,6 +201,22 @@ class Model():
 
         return peaks, troughs
 
+
+    def Q_learning_process(self):
+        alpha = 0.1
+        gamma = 0.9
+        epsilon = 0.1
+        visited = set()
+        for i in range(1000):
+            end_point = random.randint(21, 28251)
+            while end_point in visited:
+                end_point = random.randint(21, 28251)
+            close_array = np.array(self.price[end_point - 20:end_point + 1])
+            state = self.assign_states(close_array, 21, 3)
+            if random.random() < epsilon:
+                action = random.choice(self.actions)
+            else:
+                action = self.Q_table.loc[state].idxmax()
 
 
 
