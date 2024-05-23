@@ -1,3 +1,4 @@
+from scipy.stats import linregress
 import matplotlib.pyplot as plt
 from scipy import signal
 import pandas as pd
@@ -117,10 +118,39 @@ class Model():
 
     def assign_states(self, close_array: np.array,length: int, polyorder: int):
         fig, ax = plt.subplots()
-        smooth_array = signal.savgol_filter(close_array, length, polyorder)
-        ax.plot(close_array)
-        ax.plot(smooth_array)
-        plt.show()
+        diffs = np.diff(close_array)
+        if np.all(diffs >= 0):
+            if all(diffs[i] <= diffs[i + 1] for i in range(len(diffs) - 1)):
+                return "x_sell"
+            else:
+                return "sell"
+        elif np.all(diffs <= 0):
+            if all(diffs[i] >= diffs[i + 1] for i in range(len(diffs) - 1)):
+                return "x_buy"
+            else:
+                return "buy"
+        else:
+            smooth_array = signal.savgol_filter(close_array, length, polyorder)
+            diffs = np.diff(smooth_array)
+            if np.all(diffs >= 0):
+                if all(diffs[i] <= diffs[i + 1] for i in range(len(diffs) - 1)):
+                    return "x_sell"
+                else:
+                    return "sell"
+            elif np.all(diffs <= 0):
+                if all(diffs[i] >= diffs[i + 1] for i in range(len(diffs) - 1)):
+                    return "x_buy"
+                else:
+                    return "buy"
+            else:
+                indices = np.arange(len(close_array))
+                peaks, troughs = self.zigzag(close_array, 0.1)
+                peak_indices, peak_values = zip(*peaks) if peaks else ([], [])
+                trough_indices, trough_values = zip(*troughs) if troughs else ([], [])
+                slope_peak, intercept_peak, r_peak, p_peak, std_err_peak = linregress(peak_indices, peak_values)
+                slope_trough, intercept_trough, r_trough, p_trough, std_err_trough = linregress(trough_indices, trough_values)
+                slope = (slope_peak + slope_trough) / 2
+                intercept = (intercept_trough + intercept_peak) / 2
 
     def zigzag(self, sequence: np.array, threshold=0.1):
         peaks = []

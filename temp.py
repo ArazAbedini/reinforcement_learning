@@ -1,3 +1,4 @@
+from scipy import stats
 import matplotlib.pyplot as plt
 import numpy as np
 def zigzag(sequence, threshold):
@@ -49,12 +50,28 @@ threshold = 0.1  # 10%
 peaks, troughs = zigzag(sequence, threshold)
 
 # Plot the sequence
-plt.plot(sequence, marker='o', label='Sequence')
+indices = np.arange(len(sequence))
+plt.plot(indices, sequence, marker='o', label='Sequence')
 
 # Plot the Zig Zag indicator
 peak_indices, peak_values = zip(*peaks) if peaks else ([], [])
 trough_indices, trough_values = zip(*troughs) if troughs else ([], [])
-plt.scatter(peak_indices, peak_values, color='green', marker='o', linestyle='-', label='Zig Zag Peaks')
-plt.scatter(trough_indices, trough_values, color='red', marker='o', linestyle='-', label='Zig Zag Troughs')
+slope_peak, intercept_peak, r, p, std_err = stats.linregress(peak_indices, peak_values)
+slope_trough, intercept_trough, r, p, std_err = stats.linregress(trough_indices, trough_values)
+
+def line_peak(x):
+    return slope_peak * x + intercept_peak
+
+def line_through(x):
+    return slope_trough * x + intercept_trough
+
+def line_mean(x):
+    return ((slope_peak + slope_trough) / 2) * x + (intercept_peak + intercept_trough) / 2
+
+plt.plot(indices, line_through(indices))
+plt.plot(indices, slope_peak * indices + intercept_peak)
+plt.plot(indices, line_mean(indices))
+plt.plot(peak_indices, peak_values, color='green', marker='o', linestyle='-', label='Zig Zag Peaks')
+plt.plot(trough_indices, trough_values, color='red', marker='o', linestyle='-', label='Zig Zag Troughs')
 
 plt.show()
