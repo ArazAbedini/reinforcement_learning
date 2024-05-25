@@ -19,6 +19,11 @@ class Model():
         self.peaks = self.find_maximumm()
         self.valleys = self.find_minimumm()
         self.Q_table = pd.DataFrame(data=0.0, index=self.states, columns=self.actions)
+        self.Q_table.loc['x_buy'] = [-10, 0, 10]
+        self.Q_table.loc['buy'] = [-5, 0, 5]
+        self.Q_table.loc['hold'] = [-3, 10, 3]
+        self.Q_table.loc['sell'] = [5, 0, -5]
+        self.Q_table.loc['x_sell'] = [10, 0, -10]
 
 
 
@@ -150,16 +155,24 @@ class Model():
                     return "buy"
             else:
                 indices = np.arange(len(close_array))
-                peaks, troughs = self.zigzag(close_array, 0.1)
+                peaks, troughs = self.zigzag(smooth_array, 0.1)
                 peak_indices, peak_values = zip(*peaks) if peaks else ([], [])
                 trough_indices, trough_values = zip(*troughs) if troughs else ([], [])
-                slope_peak, intercept_peak, r_peak, p_peak, std_err_peak = linregress(peak_indices, peak_values)
-                slope_trough, intercept_trough, r_trough, p_trough, std_err_trough = linregress(trough_indices, trough_values)
-                slope = (slope_peak + slope_trough) / 2
-                intercept = (intercept_trough + intercept_peak) / 2
-                if slope >= 2:
+                try:
+                    if len(peak_indices) < 3 or len(trough_indices):
+                        slope = (close_array[-1] - close_array[0]) / len(close_array)
+                        print("Not enough data points for regression.")
+                    else:
+                        slope_peak, intercept_peak, r_peak, p_peak, std_err_peak = linregress(peak_indices, peak_values)
+                        slope_trough, intercept_trough, r_trough, p_trough, std_err_trough = linregress(trough_indices, trough_values)
+                        slope = (slope_peak + slope_trough) / 2
+                        intercept = (intercept_trough + intercept_peak) / 2
+                except:
+                    slope = (close_array[-1] - close_array[0]) / len(close_array)
+
+                if slope >= 1.5:
                     return "buy"
-                elif slope <= -2:
+                elif slope <= -1.5:
                     return "sell"
                 else:
                     return "hold"
@@ -201,22 +214,58 @@ class Model():
 
         return peaks, troughs
 
+    def step(self, state, action):
+        if action == 0:
+            if state == 'hold':
+                return 'hold', 10
+            else:
+                return state, 0
+        elif action == 1:
+            if state[-3:] == 'buy':
+                if state[0] == 'x':
+                    return 'hold', 10
+                else:
+                    return 'buy', 5
+            elif state[-4:] == 'sell':
+                if state[0] == 'x':
+                    return 'x_sell', -10
+                else:
+                    return 'x_sell', -7
+            else:
+                return 'sell', -3
+        else:
+            if state[-3:] == 'buy':
+                if state[0] == 'x':
+                    return 'x_sell', -10
+                else:
+                    return 'x_sell', -7
+            elif state[-4:] == 'sell':
+                if state[0] == 'x':
+                    return 'hold', 10
+                else:
+                    return 'sell', 5
+            else:
+                return 'sell', -3
+
 
     def Q_learning_process(self):
         alpha = 0.1
         gamma = 0.9
         epsilon = 0.1
-        visited = set()
-        for i in range(1000):
+        for i in range(10000):
             end_point = random.randint(21, 28251)
-            while end_point in visited:
-                end_point = random.randint(21, 28251)
             close_array = np.array(self.price[end_point - 20:end_point + 1])
             state = self.assign_states(close_array, 21, 3)
             if random.random() < epsilon:
                 action = random.choice(self.actions)
             else:
                 action = self.Q_table.loc[state].idxmax()
+            next_state, reward = self.step(state, action)
+            old_value = self.Q_table.loc[state, action]
+            future_optimal_value = np.max(self.Q_table.loc[next_state])
+            self.Q_table.loc[state, action] = old_value + alpha * (reward + gamma * future_optimal_value - old_value)
+
+            # state = next_state
 
 
 
