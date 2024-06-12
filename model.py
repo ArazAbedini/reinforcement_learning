@@ -21,9 +21,16 @@ class Model():
         self.Q_table = pd.DataFrame(data=0.0, index=self.states, columns=self.actions)
         self.Q_table.loc['x_buy'] = [-10, 0, 10]
         self.Q_table.loc['buy'] = [-5, 0, 5]
-        self.Q_table.loc['hold'] = [-3, 10, 3]
+        self.Q_table.loc['hold'] = [-3, 100, 3]
         self.Q_table.loc['sell'] = [5, 0, -5]
         self.Q_table.loc['x_sell'] = [10, 0, -10]
+        self.Q_table_value = [
+                              [[], [], []],
+                              [[], [], []],
+                              [[], [], []],
+                              [[], [], []],
+                              [[], [], []]
+                             ]
 
 
 
@@ -214,59 +221,191 @@ class Model():
 
         return peaks, troughs
 
-    def step(self, state, action):
+    def step(self, state, action, current_close, next_closes):
         if action == 0:
-            if state == 'hold':
-                return 'hold', 10
-            else:
-                return state, 0
+            diff = np.abs(next_closes - current_close)
+            return 'hold', -diff * 10
         elif action == 1:
+            diff = next_closes - current_close
             if state[-3:] == 'buy':
                 if state[0] == 'x':
-                    return 'hold', 10
+                    return 'hold', 50 * diff
                 else:
-                    return 'buy', 5
+                    return 'buy', 30 * diff
             elif state[-4:] == 'sell':
                 if state[0] == 'x':
-                    return 'x_sell', -10
+                    return 'x_buy', 50 * diff
                 else:
-                    return 'x_sell', -7
+                    return 'buy', 30 * diff
             else:
-                return 'sell', -3
+                return 'sell', 10 * (1 / diff)
         else:
+            diff = next_closes - current_close
             if state[-3:] == 'buy':
                 if state[0] == 'x':
-                    return 'x_sell', -10
+                    return 'x_sell', 50 * diff
                 else:
-                    return 'x_sell', -7
+                    return 'x_sell', 30 * diff
             elif state[-4:] == 'sell':
                 if state[0] == 'x':
-                    return 'hold', 10
+                    return 'hold', 50 * diff
                 else:
-                    return 'sell', 5
+                    return 'sell', 30 * diff
             else:
-                return 'sell', -3
+                return 'sell', 10 * (1 / diff)
 
 
     def Q_learning_process(self):
         alpha = 0.1
         gamma = 0.9
         epsilon = 0.1
-        for i in range(10000):
-            end_point = random.randint(21, 28251)
-            close_array = np.array(self.price[end_point - 20:end_point + 1])
+        random.seed(42)
+        for i in range(10):
+            while True:
+                try:
+                    end_point = random.randint(21, 28251)
+                    close_array = np.array(self.price[end_point - 20:end_point + 1])
+                    next_close = self.price[end_point + 1]
+                    with open('states.txt', 'a') as f:
+                        f.write(str(end_point) + '\n')
+                    break
+                except:
+                    pass
             state = self.assign_states(close_array, 21, 3)
+            self.correct_states(end_point, i)
             if random.random() < epsilon:
                 action = random.choice(self.actions)
             else:
                 action = self.Q_table.loc[state].idxmax()
-            next_state, reward = self.step(state, action)
+            next_state, reward = self.step(state, action, close_array[-1], next_close)
             old_value = self.Q_table.loc[state, action]
             future_optimal_value = np.max(self.Q_table.loc[next_state])
             self.Q_table.loc[state, action] = old_value + alpha * (reward + gamma * future_optimal_value - old_value)
-
+            for i in range(len(self.Q_table_value)):
+                for j in range(len(self.Q_table_value[i])):
+                    self.Q_table_value[i][j].append(self.Q_table.iloc[i, j])
             # state = next_state
 
+    def correct_states(self, end_point:int, itera_num:int):
+        fig, ax = plt.subplots()
+        x_indices = np.arange(42)
+        close_array = np.array(self.price[end_point - 20:end_point + 1])
+        state = self.assign_states(close_array, 21, 3)
+        ax.scatter(x_indices[:20], self.price[end_point - 20:end_point], c='grey')
+        ax.scatter(x_indices[20], self.price[end_point], c='green')
+        ax.plot(x_indices[:21], self.price[end_point - 20:end_point + 1], color='k')
+        plt.title('(' + str(itera_num + 1) + ') ' + state)
+        plt.show()
+        fig, ax = plt.subplots()
+        x_indices = np.arange(42)
+        close_array = np.array(self.price[end_point - 20:end_point + 1])
+        state = self.assign_states(close_array, 21, 3)
+        ax.scatter(x_indices[:20], self.price[end_point - 20:end_point], c='grey')
+        ax.scatter(x_indices[20], self.price[end_point], c='green')
+        ax.plot(x_indices[:21], self.price[end_point - 20:end_point + 1], color='k')
+        ax.scatter(x_indices[21], self.price[end_point + 1], c='red')
+        ax.scatter(x_indices[22:], self.price[end_point + 2:end_point + 22], c='grey')
+        ax.plot(x_indices[20:], self.price[end_point:end_point + 22], color='grey')
+        plt.title('(' + str(itera_num + 1) + ') ' + state + ' * ' + str(self.price[end_point + 1]) + '-' + str(self.price[end_point]) + ' * ' + str((self.price[end_point + 1] - self.price[end_point]) / self.price[end_point]))
+        plt.show()
+    def curve(self):
+        fig, ax = plt.subplots(len(self.Q_table_value), len(self.Q_table_value[0]))
+        for i in range(len(self.Q_table_value)):
+            for j in range(len(self.Q_table_value[i])):
+                ax[i, j].plot(self.Q_table_value[i][j])
+        plt.show()
 
+
+    def three_correct_states(self, end_point:int, itera_num:int, state, med, next, action):
+        fig, ax = plt.subplots()
+        x_indices = np.arange(42)
+        close_array = np.array(self.price[end_point - 20:end_point + 1])
+        # state = self.assign_states(close_array, 21, 3)
+        ax.scatter(x_indices[:20], self.price[end_point - 20:end_point], c='grey')
+        ax.scatter(x_indices[20], self.price[end_point], c='green')
+        ax.plot(x_indices[:21], self.price[end_point - 20:end_point + 1], color='k')
+        plt.title('(' + str(itera_num) + ') ' + state)
+        plt.show()
+        fig, ax = plt.subplots()
+        x_indices = np.arange(42)
+        close_array = np.array(self.price[end_point - 20:end_point + 1])
+        # state = self.assign_states(close_array, 21, 3)
+        ax.scatter(x_indices[:20], self.price[end_point - 20:end_point], c='grey')
+        ax.scatter(x_indices[20], self.price[end_point], c='green')
+        ax.plot(x_indices[:21], self.price[end_point - 20:end_point + 1], color='k')
+        ax.scatter(x_indices[21], self.price[end_point + 1], c='red')
+        ax.scatter(x_indices[22:], self.price[end_point + 2:end_point + 22], c='grey')
+        ax.plot(x_indices[20:], self.price[end_point:end_point + 22], color='grey')
+        plt.title('(' + str(itera_num) + ') ' + str(state) + ' * ' + str(med) + '  ' +str(next)+ '  '+ str(action))
+        plt.show()
+    def three_state_step(self, state, action, close_one, close_two):
+        if action == 0:
+            diff = np.abs(close_two - close_one)
+            return 'hold', -diff * 10
+        elif action == 1:
+            diff = close_two - close_one
+            print(close)
+            if state[-3:] == 'buy':
+                if state[0] == 'x':
+                    return 'hold', 50 * diff
+                else:
+                    return 'buy', 30 * diff
+            elif state[-4:] == 'sell':
+                if state[0] == 'x':
+                    return 'x_buy', 50 * diff
+                else:
+                    return 'buy', 30 * diff
+            else:
+                return 'sell', 10 * (1 / diff)
+        else:
+            diff = close_two - close_one
+            if state[-3:] == 'buy':
+                if state[0] == 'x':
+                    return 'x_sell', 50 * diff
+                else:
+                    return 'x_sell', 30 * diff
+            elif state[-4:] == 'sell':
+                if state[0] == 'x':
+                    return 'hold', -50 * diff
+                else:
+                    return 'sell', -30 * diff
+            else:
+                return 'sell', 10 * (1 / diff)
+
+    def three_state_tag(self):
+        states = ['buy', 'hold', 'sell']
+        price_indices = []
+        states = ['buy', 'hold', 'buy', 'sell', 'buy', 'buy', 'hold', 'sell', 'hold', 'sell']
+        with open('states.txt', 'r') as f:
+            for i in range(10):
+                price_indices.append(int(f.readline()[:-1]))
+        alpha = 0.1
+        gamma = 0.9
+        epsilon = 0.1
+        for i in range(10000):
+            random_number = random.randint(0, 9)
+            end_point = price_indices[random_number]
+            close_array = np.array(self.price[end_point - 20:end_point + 1])
+            next_close = self.price[end_point + 1:end_point + 22]
+            diff_close = next_close - self.price[end_point]
+            mean_diff = np.mean(diff_close)
+            next = mean_diff + self.price[end_point]
+            state = states[random_number]
+            # self.correct_states(end_point, i)
+            # self.three_correct_states(end_point, random_number, state, np.median(next_close) / self.price[end_point], next / self.price[end_point])
+            # if random.random() < epsilon:
+            #     action = random.choice(self.actions)
+            # else:
+            action = self.Q_table.loc[state].idxmax()
+            self.three_correct_states(end_point, random_number, state, np.median(next_close) / self.price[end_point],
+                                      next / self.price[end_point], action)
+            next_state, reward = self.step(state, action, close_array[-1], next)
+            print(reward)
+            old_value = self.Q_table.loc[state, action]
+            future_optimal_value = np.max(self.Q_table.loc[next_state])
+            self.Q_table.loc[state, action] = old_value + alpha * (reward + gamma * future_optimal_value - old_value)
+            for i in range(len(self.Q_table_value)):
+                for j in range(len(self.Q_table_value[i])):
+                    self.Q_table_value[i][j].append(self.Q_table.iloc[i, j])
 
 
